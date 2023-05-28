@@ -1,9 +1,8 @@
 import logging
-import random
 from datetime import datetime, timedelta
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 from config import API_TOKEN
 from parser import make_params, get_moscow_time, get_info
 
@@ -19,11 +18,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def job(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    date_from = (datetime.fromisoformat(get_moscow_time()) - timedelta(hours=24)).isoformat()
-    params = make_params(text='Java', date_from=date_from, per_page=50)
+    date_from = context.user_data.get('last_time')
+    if not date_from:
+        date_from = (datetime.fromisoformat(get_moscow_time()) - timedelta(hours=24)).isoformat()
+    params = make_params(text='Java', date_from=date_from, per_page=100)
     response = await get_info(request='https://api.hh.ru/vacancies', params=params)
-    url = response.get('items')[0].get('alternate_url')
-    await update.message.reply_text(url)
+    context.user_data['last_time'] = get_moscow_time()
+    urls = [response.get('items')[i].get('alternate_url') for i in
+            range(min(response.get('per_page'), response.get('found')))]
+    if urls:
+        await update.message.reply_text('\n'.join(urls))
+    else:
+        await update.message.reply_text('No new vacancies')
 
 
 if __name__ == '__main__':
